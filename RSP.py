@@ -57,6 +57,23 @@ def _evaluate(points, centers, assignments, tsp_distance, alpha):
 	
 	return total_distance
 
+def draw(points, centers, assignments, tsp_path, tsp_distance, alpha):
+	plt.scatter(points[:,0], points[:,1], c=assignments)
+	plt.scatter(centers[:,0], centers[:,1], c='red')
+	# plot assignment lines
+	for i in range(len(points)):
+		plt.plot([points[i,0], centers[assignments[i],0]], [points[i,1], centers[assignments[i],1]], c='black', alpha=0.1)
+	# write p
+	plt.annotate('p = {}'.format(p), xy=(0.05, 0.85), xycoords='axes fraction')
+	# plot the tsp path
+	if tsp_path is not None:
+		# Add the first point to the end of the path
+		path = np.hstack([tsp_path, tsp_path[0]])
+		plt.plot(centers[path,0], centers[path,1], c='black')
+		# write the total distance
+		tot_dist = _evaluate(points, centers, assignments, tsp_distance, alpha)
+		plt.annotate('Total distance: {:.2f}'.format(tot_dist), xy=(0.05, 0.95), xycoords='axes fraction')
+	plt.show()
 
 class RingStarProblem:
 	def __init__(self, nuage_points:NuagePoints, alpha=5):
@@ -83,27 +100,6 @@ class RingStarProblem:
 	# 	self._solve_p_center_problem(best_p)
 	# 	self._solve_tsp(self.centers)
 	# 	return best_p
-
-	def draw(self):
-		if self.centers is not None and self.assignments is not None:
-			plt.scatter(self.nuage_points.points[:,0], self.nuage_points.points[:,1], c=self.assignments)
-			plt.scatter(self.centers[:,0], self.centers[:,1], c='red')
-			# plot assignment lines
-			for i in range(self.nuage_points.num_cities):
-				plt.plot([self.nuage_points.points[i,0], self.centers[self.assignments[i],0]], [self.nuage_points.points[i,1], self.centers[self.assignments[i],1]], c='black', alpha=0.1)
-			# write p
-			plt.annotate('p = {}'.format(self.p), xy=(0.05, 0.85), xycoords='axes fraction')
-			# plot the tsp path
-			if self.tsp_path is not None:
-				# Add the first point to the end of the path
-				path = np.hstack([self.tsp_path, self.tsp_path[0]])
-				plt.plot(self.centers[path,0], self.centers[path,1], c='black')
-				# write the total distance
-				tot_dist = _evaluate(self.nuage_points.points, self.centers, self.assignments, self.tsp_distance, self.alpha)
-				plt.annotate('Total distance: {:.2f}'.format(tot_dist), xy=(0.05, 0.95), xycoords='axes fraction')
-			plt.show()
-		else:
-			raise Exception('The problem has not been solved yet')
 		
 	def metha_heuristic(self, iteration, p):
 		c = self._solve_p(p)
