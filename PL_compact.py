@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from NuagePoints import NuagePoints
 
 # Get the distance matrix
-nuage = NuagePoints('./Instances_TSP/att48.tsp')
+nuage = NuagePoints('./Instances_TSP/ch150.tsp')
 d = distance_matrix(nuage.points, nuage.points)
 
 # Create a Gurobi model
@@ -18,10 +18,10 @@ m = gp.Model("RSP")
 
 # Create variables
 n = d.shape[0]  # Number of nodes
-p = 10  # Number of stations
+p = n*0.20  # Number of stations
 alpha = 10
-x = {} # Assign node i to station j
-y = {} # Edge of the TSP path
+x = {} # Edge of the TSP path
+y = {} # Assignment of nodes to stations
 z = {} # Flow variable
 
 V = range(n)
@@ -44,32 +44,32 @@ obj = (gp.quicksum( d[i,j] * x[i,j] for i in V for j in V if i != j)
 m.setObjective(obj, GRB.MINIMIZE)
 
 # Add constraints
-# Exactly p stations
+# Exactly p stations (1)
 m.addConstr(gp.quicksum(y[i, i] for i in V) == p)
 
-# Each node that is not a station is assigned to only one station
+# Each node that is not a station is assigned to only one station (2)
 m.addConstrs(gp.quicksum(y[i, j] for j in V) == 1
              for i in V)
 
-# Each station is assigned to itself
+# Each station is assigned to itself (3)
 m.addConstrs(y[i, j] <= y[j, j]
              for i in V
              for j in V if i != j)
 
-# Each station has 2 edges (in and out) in the TSP path
+# Each station has 2 edges (in and out) in the TSP path (4)
 m.addConstrs(gp.quicksum(x[i, j] for j in V if i != j) == 2 * y[i, i] 
              for i in V)
 
 # Flow constraints
-# Flow out of the first node is p-1
+# Flow out of the first node is p-1 (5)
 m.addConstr(gp.quicksum(z[0, j] for j in range(1, n)) == p - 1)
 
-# Flow out is equal to flow in - 1
+# Flow out is equal to flow in - 1 (6)
 m.addConstrs(
     (gp.quicksum(z[j, i] for j in V if j != i)) == (gp.quicksum(z[i, j] for j in range(1, n) if j != i) + y[i, i]) 
     for i in range(1, n))
 
-# Flow is on edges of the TSP path
+# Flow is on edges of the TSP path (7)
 m.addConstrs(z[i ,j] + z[j, i] <= (p - 1) * x[i, j] 
              for i in V 
              for j in range(1, n) if j != i)
@@ -147,7 +147,7 @@ for edge in edges:
 
 # draw graph
 pos = nx.get_node_attributes(G, 'pos')
-nx.draw_networkx_nodes(G, pos, node_size=50)
+nx.draw_networkx_nodes(G, pos, node_size=5)
 
 # draw assignments
 nx.draw_networkx_edges(G, pos, edgelist=[edge for edge in G.edges() if G.edges[edge]['type'] == 'assignment'], width=1, alpha=0.5, edge_color='black')
