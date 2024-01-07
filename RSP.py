@@ -1,123 +1,61 @@
-from math import ceil, sqrt
-from matplotlib import pyplot as plt
+from dataclasses import dataclass, field
+from typing import List
+
+import networkx as nx
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.spatial import distance_matrix
-from scipy.spatial.distance import cdist
-from python_tsp.heuristics import solve_tsp_simulated_annealing
 
-from NuagePoints import NuagePoints
-import copy
-
-def _solve_tsp(centers):
-	# Create a distance matrix for the centers
-	distances = distance_matrix(centers, centers)
-	permutation, distance = solve_tsp_simulated_annealing(distances)
-	return permutation, distance
-
-def _solve_p_center_problem(points, p):
-	p = p
-	q = ceil(sqrt(p))
-	x_min, y_min = np.min(points, axis=0)
-	x_max, y_max = np.max(points, axis=0)
-
-	# Divide the area into q x q rectangles
-	x_step = (x_max - x_min) / q
-	y_step = (y_max - y_min) / q
-	x_coords, y_coords = np.meshgrid(np.arange(x_min, x_max, x_step), np.arange(y_min, y_max, y_step))
-	rect_centers = np.stack([x_coords.ravel(), y_coords.ravel()], axis=1)
-
-	# Find the closest point to each rectangle center
-	distances = distance_matrix(rect_centers, points)
-	closest_indices = np.argmin(distances, axis=1)
-	closest_indices = np.unique(closest_indices)
-	
-	# Ensure we have exactly p centers
-	if len(closest_indices) > p:
-		centers = points[np.random.choice(closest_indices, p, replace=False)]
-	elif len(closest_indices) < p:
-		additional_indices = np.random.choice(points.shape[0], p - len(closest_indices), replace=False)
-		centers = np.vstack([points[closest_indices], points[additional_indices]])
-	else:
-		centers = points[closest_indices]
-
-	# Assign non-center points to the nearest center
-	assignments = np.argmin(distance_matrix(points, centers), axis=1)
-
-	return centers, assignments
-
-def _evaluate(points, centers, assignments, tsp_distance, alpha):
-	# Compute the sum of the distances between the points and their assigned center
-	assignment_distance = np.sum(np.linalg.norm(points - centers[assignments], axis=1))
-	
-	# Apply the weight to the tsp distance
-	weighted_tsp_distance = alpha * tsp_distance
-	
-	# Total evaluation
-	total_distance = weighted_tsp_distance + assignment_distance
-	
-	return total_distance
-
-def draw(points, centers, assignments, tsp_path, tsp_distance, alpha):
-	plt.scatter(points[:,0], points[:,1], c=assignments)
-	plt.scatter(centers[:,0], centers[:,1], c='red')
-	# plot assignment lines
-	for i in range(len(points)):
-		plt.plot([points[i,0], centers[assignments[i],0]], [points[i,1], centers[assignments[i],1]], c='black', alpha=0.1)
-	# write p
-	plt.annotate('p = {}'.format(p), xy=(0.05, 0.85), xycoords='axes fraction')
-	# plot the tsp path
-	if tsp_path is not None:
-		# Add the first point to the end of the path
-		path = np.hstack([tsp_path, tsp_path[0]])
-		plt.plot(centers[path,0], centers[path,1], c='black')
-		# write the total distance
-		tot_dist = _evaluate(points, centers, assignments, tsp_distance, alpha)
-		plt.annotate('Total distance: {:.2f}'.format(tot_dist), xy=(0.05, 0.95), xycoords='axes fraction')
-	plt.show()
-
-class RingStarProblem:
-	def __init__(self, nuage_points:NuagePoints, alpha=5):
-		self.nuage_points = nuage_points
-		self.p = 0
-		self.alpha = alpha
-		self.centers = None
-		self.assignments = None
-		self.tsp_path = None
-		self.tsp_distance = 0
-
-	def get_solution(self):
-		return self.centers, self.assignments, self.tsp_path
-
-	def _solve_p(self, p):
-		self.centers, self.assignments = _solve_p_center_problem(self.nuage_points.points, p)
-		self.tsp_path, self.tsp_distance = _solve_tsp(self.centers)
-		return _evaluate(self.nuage_points.points, self.centers, self.assignments, self.tsp_distance, self.alpha)
-	
-	# def solve(self, p_min, p_max):
-	# 	p_values = np.arange(p_min, p_max + 1)
-	# 	results = np.array([self._solve_p(p) for p in p_values])
-	# 	best_p = p_values[np.argmin(results)]
-	# 	self._solve_p_center_problem(best_p)
-	# 	self._solve_tsp(self.centers)
-	# 	return best_p
-		
-	def metha_heuristic(self, iteration, p):
-		c = self._solve_p(p)
-
-		for _ in range(iteration):
-			# Choose a random center and a random point
-			swap_index = np.random.choice(self.centers)
-
-			for i in range(self.nuage_points.num_cities):
-				if i not in self.centers:
-					new_centers = copy.deepcopy(self.centers)
-					new_centers[swap_index] = i
-					assignments = np.argmin(distance_matrix(self.nuage_points.points, new_centers), axis=1)
-					_solve_tsp(new_centers)
+from utils import calculate_cost
 
 
-if __name__ == '__main__':
-	nuage_points = NuagePoints('./Instances_TSP/att48.tsp')
-	rsp = RingStarProblem(nuage_points)
-	rsp.solve(3, 20)
-	rsp.draw()
+@dataclass
+class RSP:
+	points: np.ndarray  # 点集，每个点由纬度和经度组成，存储在 NumPy 数组中
+	alpha: float        # assignment cost 的权重
+	p: int              # 选择作为车站的点的数量
+	distance_matrix: np.ndarray = field(init=False)  # 距离矩阵，初始时不在构造函数中设置
+	assignments: List[int] = field(default_factory=list)  # 非车站点到车站点的分配
+	tsp_path: List[int] = field(default_factory=list)  # 旅行商问题路径
+	cost: float = field(init=False)  # RSP 的总成本
+
+	def __post_init__(self):
+		self.distance_matrix = distance_matrix(self.points, self.points)
+
+	def create_graph(self):
+		G = nx.Graph()
+		# 添加节点
+		for i in range(len(self.points)):
+			G.add_node(i, pos=(self.points[i][0], self.points[i][1]))
+
+		# 使用 TSP 路径添加车站之间的边
+		for i in range(len(self.tsp_path)):
+			if i < len(self.tsp_path) - 1:
+				G.add_edge(self.tsp_path[i], self.tsp_path[i+1], type= 'tsp')
+			# 将路径的最后一个点连接回第一个点，形成闭环
+			else:
+				G.add_edge(self.tsp_path[i], self.tsp_path[0], type='tsp')
+
+		# 添加非车站点到车站点的边
+		for i, center in enumerate(self.assignments):
+			if i not in self.tsp_path:
+				G.add_edge(i, center, type='assignment')
+
+		return G
+
+	def savefig(self, filename):
+		G = self.create_graph()
+		pos = nx.get_node_attributes(G, 'pos')
+		nx.draw_networkx_nodes(G, pos, node_size=5)
+		# draw centers
+		nx.draw_networkx_nodes(G, pos, nodelist=self.tsp_path, node_size=10, node_color='r')
+		# draw assignments
+		nx.draw_networkx_edges(G, pos, edgelist=[edge for edge in G.edges() if G.edges[edge]['type'] == 'assignment'], width=1, alpha=0.5, edge_color='black')
+		# draw tsp path
+		nx.draw_networkx_edges(G, pos, edgelist=[edge for edge in G.edges() if G.edges[edge]['type'] == 'tsp'], width=1, alpha=1, edge_color='red')
+		# write cost
+		plt.text(0, 0, f"Cost: {self.cost}", fontsize=12)
+		plt.savefig(filename)
+
+	def evaluate(self):
+		self.cost = calculate_cost(self.distance_matrix, self.tsp_path, self.assignments, self.alpha)
