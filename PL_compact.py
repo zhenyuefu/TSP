@@ -1,14 +1,17 @@
 from itertools import combinations
+import time
 
 import gurobipy as gp
 from gurobipy import GRB
 from scipy.spatial import distance_matrix
 
-from utils import draw_solution, dump_solution, read_points
+from utils import draw_solution, dump_result, read_points, arg_parser
 
-def pl_compact(file, prop, alpha):
+def pl_compact(args):
+	start_time = time.time()
+	
 	# Get the distance matrix
-	points = read_points(file)
+	points = read_points(args.filename)
 	d = distance_matrix(points, points)
 
 	# Create a Gurobi model
@@ -16,10 +19,10 @@ def pl_compact(file, prop, alpha):
 
 	# Create variables
 	n = d.shape[0]  	# Number of nodes
-	p = n*prop  		# Number of stations
+	p = n*args.prop  	# Number of stations
 	x = {} 				# Edge of the TSP path
 	y = {} 				# Assignment of nodes to stations
-	z = {}              # Flow variable
+	z = {}			  	# Flow variable
 
 	V = range(n)
 	E = gp.tuplelist([(i, j) for i in V for j in V if i != j])
@@ -37,7 +40,7 @@ def pl_compact(file, prop, alpha):
 
 	# set objective
 	obj = (gp.quicksum( d[i,j] * x[i,j] for i in V for j in V if i != j) 
-		+  gp.quicksum(alpha * d[i,j] * y[i,j] for i in V for j in V if i != j))
+		+  gp.quicksum(args.alpha * d[i,j] * y[i,j] for i in V for j in V if i != j))
 	m.setObjective(obj, GRB.MINIMIZE)
 
 	# Add constraints
@@ -78,12 +81,30 @@ def pl_compact(file, prop, alpha):
 	# Optimize the model
 	m.optimize()
 
-	# show solution
-	dump_solution(x)
-	draw_solution(points, x, y)
- 
+	end_time = time.time()
+
+	# Check if the optimization was successful
+	if m.status == GRB.OPTIMAL:
+		objective_value = m.objVal
+		
+		# Calculate the runtime
+		runtime = end_time - start_time
+		
+		# Construct the result to dump
+		result_to_dump = {
+			"Objective Value": objective_value,
+			"Runtime": runtime
+		}
+		
+		# Dump the result
+		dump_result(result_to_dump, "PL_c_"+args.filename)
+		draw_solution(points, x, y)
+	else:
+		dump_result("Failed", "PL_c_"+args.filename)
+		print("Optimization did not find an optimal solution.")
+
+
+
 if __name__ == "__main__":
-    file = "./Instances_TSP/ch150.tsp"
-    prop = 0.2
-    alpha = 10
-    pl_compact(file, prop, alpha)     
+	args = arg_parser()
+	pl_compact(args)

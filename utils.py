@@ -1,5 +1,8 @@
-import numpy as np
+import argparse
 from collections import defaultdict
+import os
+
+import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -35,6 +38,7 @@ def calculate_cost(d, path, assignments, rsp_alpha):
 	assignment_cost = np.sum(d[np.arange(len(assignments)), assignments])
 	return tsp_cost + rsp_alpha * assignment_cost
 
+
 def find_subtours(edges):
 	"""Given a list of edges, return the shortest subtour (as a list of nodes)
 	found by following those edges. It is assumed there is exactly one 'in'
@@ -62,18 +66,48 @@ def find_subtours(edges):
 
 	return cycles
 
-def dump_solution(x):
-    # Print tsp path
+
+def dump_result(result, name):
+	directory = "result"
+	base_filename = f"{directory}/"+name
+	run_num = 0
+
+	# Check if the directory exists, if not, create it
+	if not os.path.exists(directory):
+		os.makedirs(directory)
+	else:
+		# Check existing files to determine the next run_num
+		existing_files = [f for f in os.listdir(directory) if f.startswith('name') and f.endswith('.txt')]
+		if existing_files:
+			existing_run_nums = [int(f[len('name'):-len('.txt')]) for f in existing_files]
+			run_num = max(existing_run_nums) + 1
+
+	filename = f"{base_filename}_{run_num}.txt"
+
+	with open(filename, "w") as file:
+		file.write(str(result))
+	print(f"Result dumped to {filename}")
+
+
+def arg_parser():
+    parser = argparse.ArgumentParser(description="Description of your program")
+    parser.add_argument('--option', '-o', help='Description of the option')
+    parser.add_argument('-f', '--filename', help='Filename')
+    parser.add_argument('-a', '--alpha', default=10, help='Alpha')
+    parser.add_argument('-e', '--epsilon', default=0.0001, help='Epsilon')
+    parser.add_argument('-p', '--prop', default=0.2, help='Proportion of stations')
+    args = parser.parse_args()
+    return args
+
+
+def draw_solution(points, x, y):
+	# Print tsp path
 	print("TSP path:")
 	edges = [(i, j) for (i, j), v in x.items() if v.X > 0.5]
 	tour = find_subtours(edges)
 	print(f"Optimal tour: {tour}")
-
-def draw_solution(points, x, y):
-	edges = [(i, j) for (i, j), v in x.items() if v.X > 0.5]
+ 
 	N = len(points)
-
-	
 	G = nx.Graph()
 	for i in range(N):
 		G.add_node(i, pos = points[i])

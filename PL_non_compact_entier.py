@@ -1,10 +1,11 @@
 from itertools import combinations
+import time
 
 import gurobipy as gp
 from gurobipy import GRB
 from scipy.spatial import distance_matrix
 
-from utils import find_subtours, draw_solution, dump_solution, read_points
+from utils import arg_parser, find_subtours, draw_solution, dump_result, read_points
 
 class RingStarCallback:
 	def __init__(self, x, y, p, V):
@@ -26,14 +27,16 @@ class RingStarCallback:
 					if 1 not in S:
 						for i in S:
 							model.cbLazy(gp.quicksum(self.x[x,y] for x in S for y in nS) 
-                    					>= 2*self.y[i, i])
-       
+										>= 2*self.y[i, i])
+	   
 				print("Added lazy constraints for violated cycles")
 
 
-def pl_non_compact_entier(file, prop, alpha):
+def pl_non_compact_entier(args):
+	start_time = time.time()
+ 
 	# Get the distance matrix
-	points = read_points(file)
+	points = read_points(args.filename)
 	d = distance_matrix(points, points)
 
 	# Create a Gurobi model
@@ -41,7 +44,7 @@ def pl_non_compact_entier(file, prop, alpha):
 
 	# Create variables
 	n = d.shape[0]  	# Number of nodes
-	p = n*prop  		# Number of stations
+	p = n*args.prop  	# Number of stations
 	x = {} 				# Edge of the TSP path
 	y = {} 				# Assignment of nodes to stations
 
@@ -60,7 +63,7 @@ def pl_non_compact_entier(file, prop, alpha):
 
 	# set objective
 	obj = (gp.quicksum( d[i,j] * x[i,j] for i in V for j in V if i != j) 
-		+  gp.quicksum(alpha * d[i,j] * y[i,j] for i in V for j in V if i != j))
+		+  gp.quicksum(args.alpha * d[i,j] * y[i,j] for i in V for j in V if i != j))
 	m.setObjective(obj, GRB.MINIMIZE)
 
 	# Add constraints
@@ -92,14 +95,31 @@ def pl_non_compact_entier(file, prop, alpha):
 	m.Params.LazyConstraints = 1
 	cb = RingStarCallback(x, y, p, V)
 	m.optimize(cb)
+ 
+	end_time = time.time()
+
+	# Check if the optimization was successful
+	if m.status == GRB.OPTIMAL:
+		objective_value = m.objVal
+		
+		# Calculate the runtime
+		runtime = end_time - start_time
+		
+		# Construct the result to dump
+		result_to_dump = {
+			"Objective Value": objective_value,
+			"Runtime": runtime
+		}
+		
+		# Dump the result
+		dump_result(result_to_dump, "PL_nce_"+args.filename)
+		draw_solution(points, x, y)
+	else:
+		dump_result("Failed", "PL_nce_"+args.filename)
+		print("Optimization did not find an optimal solution.")
 
 
-	# show solution
-	dump_solution(x)
-	draw_solution(points, x, y)
 
 if __name__ == "__main__":
-    file = "./Instances_TSP/ch150.tsp"
-    prop = 0.20
-    alpha = 10
-    pl_non_compact_entier(file, prop, alpha)
+	args = arg_parser()
+	pl_non_compact_entier(args)
