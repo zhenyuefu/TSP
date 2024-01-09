@@ -3,11 +3,11 @@ import time
 
 import gurobipy as gp
 from gurobipy import GRB
-from scipy.spatial import distance_matrix
-import networkx as nx
+from igraph import Graph
 
+from utils import arg_parser, find_subtours, get_solution, dump_result, read_points
+from RSP import RSP
 import numpy as np
-from utils import arg_parser, find_subtours, draw_solution, dump_result, read_points
 
 class RingStarCallback:
 	def __init__(self, points, x, y, p, V, epsilon):
@@ -34,8 +34,6 @@ class RingStarCallback:
 							model.cbLazy(gp.quicksum(self.x[x,y] for x in S for y in nS) 
 						  					>= 2*self.y[i, i])
 
-				print("Added lazy constraints for violated cycles")
-
 		# heuristic separation
 		elif where == GRB.Callback.MIPNODE:
 			if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL:
@@ -51,50 +49,51 @@ class RingStarCallback:
 								S.append(j)
 								nS.remove(j)
 							if np.sum([xrel[x,y] for x in S for y in nS]) < 2*yrel[i, i]:
-								print("Added user cut")
 								for k in S:
 									model.cbCut(gp.quicksum(self.x[x,y] for x in S for y in nS) 
 						  					>= 2*self.y[k, k])
 								break
 
 		# exact separation
-		elif where == GRB.Callback.MIPNODE:
-			if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL:
-				xrel = model.cbGetNodeRel(self.x)
-				yrel = model.cbGetNodeRel(self.y)
-				edges = [(i, j) for (i, j), v in xrel.items() if v > 0]	
- 
-				# Construct an undirected graph with weighted edges
-				G = nx.Graph()
-				# add nodes
-				for i in self.V:
-					G.add_node(i, pos = self.points[i])
-				# add edges
-				for (x,y) in edges:
-					G.add_edge(x, y, capacity=xrel[x,y])
-				
-				for i in range(1, self.n):
-					min_cut, (S, nS) = nx.minimum_cut(G, 0, i)
-					if min_cut < 2*yrel[i, i] - self.epsilon:
-						print("Added user cut")
-						for k in S:
-							model.cbCut(gp.quicksum(self.x[x,y] for x in S for y in nS) 
-						  					>= 2*self.y[k, k])
+		# elif where == GRB.Callback.MIPNODE:
+		# 	if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL:
+		# 		xrel = model.cbGetNodeRel(self.x)
+		# 		yrel = model.cbGetNodeRel(self.y)
+		# 		edges = [(i, j) for (i, j), v in xrel.items() if v > 0]
+
+		# 		# 使用 igraph 构建一个无向图
+		# 		G = Graph()
+		# 		G.add_vertices(self.V)  # 添加顶点
+		# 		G.add_edges(edges)  # 添加边
+		# 		G.es['capacity'] = [xrel[edge] for edge in edges]  # 添加边的权重
+
+		# 		for i in range(1, self.n):
+		# 			# 使用 igraph 计算最小割
+		# 			mc = G.mincut(0, i, capacity='capacity')
+		# 			min_cut = mc.value
+		# 			S, nS = mc.partition
+
+		# 			if min_cut < 2 * yrel[i, i] - self.epsilon:
+		# 				for k in S:
+		# 					model.cbCut(gp.quicksum(self.x[x, y] for x in S for y in nS if (x, y) in self.x) 
+		# 								>= 2 * self.y[k, k])
+		
 
 
 def pl_non_compact_fractionnaire(args):
-	start_time = time.time()
-
 	# Get the distance matrix
 	points = read_points(args.filename)
-	d = distance_matrix(points, points)
+	n = len(points) 	# Number of nodes
+	p = int(n*args.prop)  	# Number of stations
+	rsp = RSP(points, args.alpha, p)
+	d = rsp.distance_matrix
 
+	start_time = time.time()
+	
 	# Create a Gurobi model
 	m = gp.Model("RSP")
 
 	# Create variables
-	n = d.shape[0]  	# Number of nodes
-	p = n*args.prop  	# Number of stations
 	x = {} 				# Edge of the TSP path
 	y = {} 				# Assignment of nodes to stations
 
@@ -146,6 +145,7 @@ def pl_non_compact_fractionnaire(args):
 	m.optimize(cb)
 
 	end_time = time.time()
+	instance_name = args.filename.split("/")[2].split(".")[0]
 
 	# Check if the optimization was successful
 	if m.status == GRB.OPTIMAL:
@@ -154,17 +154,22 @@ def pl_non_compact_fractionnaire(args):
 		# Calculate the runtime
 		runtime = end_time - start_time
 		
+		rsp.tsp_path, rsp.assignments = get_solution(points, x, y)
+		rsp.evaluate()
+		
 		# Construct the result to dump
 		result_to_dump = {
 			"Objective Value": objective_value,
+			"Cost": rsp.tsp_cost,
+			"MeanTime": rsp.time,
+			"Ration": rsp.ratio,
 			"Runtime": runtime
 		}
 		
 		# Dump the result
-		dump_result(result_to_dump, "PL_ncf_"+args.filename)
-		draw_solution(points, x, y)
+		dump_result(result_to_dump, rsp, "PL_ncf_"+instance_name)
 	else:
-		dump_result("Failed", "PL_ncf_"+args.filename)
+		dump_result("Failed", None,  "PL_ncf_"+instance_name)
 		print("Optimization did not find an optimal solution.")
 
 

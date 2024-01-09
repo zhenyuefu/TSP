@@ -5,7 +5,8 @@ import gurobipy as gp
 from gurobipy import GRB
 from scipy.spatial import distance_matrix
 
-from utils import arg_parser, find_subtours, draw_solution, dump_result, read_points
+from utils import arg_parser, find_subtours, get_solution, dump_result, read_points
+from RSP import RSP
 
 class RingStarCallback:
 	def __init__(self, x, y, p, V):
@@ -28,23 +29,22 @@ class RingStarCallback:
 						for i in S:
 							model.cbLazy(gp.quicksum(self.x[x,y] for x in S for y in nS) 
 										>= 2*self.y[i, i])
-	   
-				print("Added lazy constraints for violated cycles")
 
 
 def pl_non_compact_entier(args):
-	start_time = time.time()
- 
 	# Get the distance matrix
 	points = read_points(args.filename)
-	d = distance_matrix(points, points)
+	n = len(points) 	# Number of nodes
+	p = int(n*args.prop)  	# Number of stations
+	rsp = RSP(points, args.alpha, p)
+	d = rsp.distance_matrix
 
+	start_time = time.time()
+	
 	# Create a Gurobi model
 	m = gp.Model("RSP")
 
 	# Create variables
-	n = d.shape[0]  	# Number of nodes
-	p = n*args.prop  	# Number of stations
 	x = {} 				# Edge of the TSP path
 	y = {} 				# Assignment of nodes to stations
 
@@ -97,6 +97,7 @@ def pl_non_compact_entier(args):
 	m.optimize(cb)
  
 	end_time = time.time()
+	instance_name = args.filename.split("/")[2].split(".")[0]
 
 	# Check if the optimization was successful
 	if m.status == GRB.OPTIMAL:
@@ -104,18 +105,23 @@ def pl_non_compact_entier(args):
 		
 		# Calculate the runtime
 		runtime = end_time - start_time
+  
+		rsp.tsp_path, rsp.assignments = get_solution(points, x, y)
+		rsp.evaluate()
 		
 		# Construct the result to dump
 		result_to_dump = {
 			"Objective Value": objective_value,
+			"Cost": rsp.tsp_cost,
+			"MeanTime": rsp.time,
+			"Ratio": rsp.ratio,
 			"Runtime": runtime
 		}
 		
 		# Dump the result
-		dump_result(result_to_dump, "PL_nce_"+args.filename)
-		draw_solution(points, x, y)
+		dump_result(result_to_dump, rsp, "PL_nce_"+instance_name)
 	else:
-		dump_result("Failed", "PL_nce_"+args.filename)
+		dump_result("Failed", None,  "PL_nce_"+instance_name)
 		print("Optimization did not find an optimal solution.")
 
 

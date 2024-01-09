@@ -1,10 +1,10 @@
 import argparse
 from collections import defaultdict
 import os
+from graph_tool import Graph
 
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
+from graph_tool.topology import shortest_path
 
 def read_points(filename):
 	points = []
@@ -32,12 +32,36 @@ def calculate_tsp_cost(d, path):
 	total_cost = np.sum(d[path[:-1], path[1:]])
 	return total_cost
 
+def calculate_assignment_cost(d, assignments):
+	assignment_cost = np.sum(d[np.arange(len(assignments)), assignments])
+	return assignment_cost
 
 def calculate_cost(d, path, assignments, rsp_alpha):
 	tsp_cost = calculate_tsp_cost(d, path)
-	assignment_cost = np.sum(d[np.arange(len(assignments)), assignments])
+	assignment_cost = calculate_assignment_cost(d, assignments)
 	return tsp_cost + rsp_alpha * assignment_cost
 
+def compute_time_and_ratio(G:Graph):
+	N = G.num_vertices()
+
+	ratio = 0
+	time = 0
+	walk  = 0
+	metro = 0
+	for i in range(N):
+		for j in range(i+1, N):
+			_, edges = shortest_path(G, i, j,weights=G.ep['weight'], negative_weights=False)
+			for x in edges:
+				if G.ep.type[x] == "assignment":
+					walk += G.ep.weight[x]
+				else:
+					metro += G.ep.weight[x]
+				time += G.ep.weight[x]
+			# ratio += walk / metro if metro != 0 else 0
+	ratio = walk / metro if metro != 0 else 0
+	time /= (N * (N-1) / 2)
+
+	return ratio, time
 
 def find_subtours(edges):
 	"""Given a list of edges, return the shortest subtour (as a list of nodes)
@@ -67,7 +91,7 @@ def find_subtours(edges):
 	return cycles
 
 
-def dump_result(result, name):
+def dump_result(result, rsp, name):
 	directory = "result"
 	base_filename = f"{directory}/"+name
 	run_num = 0
@@ -77,10 +101,9 @@ def dump_result(result, name):
 		os.makedirs(directory)
 	else:
 		# Check existing files to determine the next run_num
-		existing_files = [f for f in os.listdir(directory) if f.startswith('name') and f.endswith('.txt')]
+		existing_files = [f for f in os.listdir(directory) if f.startswith(name) and f.endswith('.txt')]
 		if existing_files:
-			existing_run_nums = [int(f[len('name'):-len('.txt')]) for f in existing_files]
-			run_num = max(existing_run_nums) + 1
+			run_num = len(existing_files)
 
 	filename = f"{base_filename}_{run_num}.txt"
 
@@ -88,48 +111,37 @@ def dump_result(result, name):
 		file.write(str(result))
 	print(f"Result dumped to {filename}")
 
+	if rsp:
+		rsp.savefig(f"{base_filename}_{run_num}.svg")
+
 
 def arg_parser():
     parser = argparse.ArgumentParser(description="Description of your program")
     parser.add_argument('--option', '-o', help='Description of the option')
     parser.add_argument('-f', '--filename', help='Filename')
-    parser.add_argument('-a', '--alpha', default=10, help='Alpha')
-    parser.add_argument('-e', '--epsilon', default=0.0001, help='Epsilon')
-    parser.add_argument('-p', '--prop', default=0.2, help='Proportion of stations')
+    parser.add_argument('-a', '--alpha', type=float, default=10, help='Alpha')
+    parser.add_argument('-e', '--epsilon', type=float, default=0.0001, help='Epsilon')
+    parser.add_argument('-p', '--prop', type=float, default=0.25, help='Proportion of stations')
     args = parser.parse_args()
     return args
 
 
-def draw_solution(points, x, y):
+def get_solution(points, x, y):
 	# Print tsp path
 	print("TSP path:")
 	edges = [(i, j) for (i, j), v in x.items() if v.X > 0.5]
-	tour = find_subtours(edges)
-	print(f"Optimal tour: {tour}")
- 
+	tsp_path = find_subtours(edges)[0]
+	print(f"Optimal tour: {tsp_path}")
+	
 	N = len(points)
-	G = nx.Graph()
-	for i in range(N):
-		G.add_node(i, pos = points[i])
 
-	# add assignments edges to graph
+	assignments = [i for i in range(N)]
 	for i in range(N):
 		for j in range(N):
-			if y[i, j].X > 0.5 and i != j:
-				G.add_edge(i, j, type = 'assignment')
-
-	# add tsp edges to graph
-	for edge in edges:
-		G.add_edge(edge[0], edge[1], type = 'tsp')
-
-	# draw graph
-	pos = nx.get_node_attributes(G, 'pos')
-	nx.draw_networkx_nodes(G, pos, node_size=5)
-
-	# draw assignments
-	nx.draw_networkx_edges(G, pos, edgelist=[edge for edge in G.edges() if G.edges[edge]['type'] == 'assignment'], width=1, alpha=0.5, edge_color='black')
-
-	# draw tsp path
-	nx.draw_networkx_edges(G, pos, edgelist=[edge for edge in G.edges() if G.edges[edge]['type'] == 'tsp'], width=1, alpha=1, edge_color='red')
-
-	plt.show()
+			if y[i, j].X > 0.5:
+				assignments[i] = j
+				break
+	
+	return tsp_path, assignments
+	
+	

@@ -1,5 +1,6 @@
 import random
 from dataclasses import dataclass, field
+import time
 from typing import List
 
 import numpy as np
@@ -9,7 +10,7 @@ import elkai
 from RSP import RSP
 from christofides_tsp import christofides_tsp
 from three_opt import tsp_3_opt
-from utils import read_points, calculate_tsp_cost, calculate_cost
+from utils import dump_result, read_points, calculate_tsp_cost, calculate_cost, arg_parser
 
 
 @dataclass
@@ -238,17 +239,29 @@ class HybridACS:
 
 
 if __name__ == '__main__':
-	filename = 'att48.tsp'
-	alpha = 10
-	p = 10
-	points = read_points(f'./Instances_TSP/{filename}')
+	args = arg_parser()
+	alpha = args.alpha
+	points = read_points(args.filename)
+	p = int(len(points) * args.prop)
+	instance_name = args.filename.split('/')[-1].split('.')[0]
 	rsp = RSP(points=points, alpha=alpha, p=p)
 	solver = HybridACS(rsp, num_ants=4)
+	start_time = time.time()
 	solution = solver.solve()
+	end_time = time.time()
+	print(f"Runtime: {end_time - start_time}")
 	rsp.tsp_path = solution.path
 	rsp.assignments = solution.assignments
 	rsp.cost = solution.cost
 	print(solution.cost)
 	print(solution.path)
 	print(solution.assignments)
-	rsp.savefig(f'{filename[:-4]}_p{p}_alpha{alpha}.png')
+	rsp.evaluate()
+	results = {
+		"Objective Value": solution.cost,
+		"Cost": rsp.tsp_cost,
+		"MeanTime": rsp.time,
+		"Ratio": rsp.ratio,
+		"Runtime": end_time - start_time,
+	}
+	dump_result(results, rsp, f"hacs_{instance_name}_p{p}_alpha{alpha}")
