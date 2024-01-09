@@ -10,20 +10,38 @@ import elkai
 from RSP import RSP
 from christofides_tsp import christofides_tsp
 from three_opt import tsp_3_opt
-from utils import dump_result, read_points, calculate_tsp_cost, calculate_cost, arg_parser
+from utils import (
+	dump_result,
+	read_points,
+	calculate_tsp_cost,
+	calculate_cost,
+	arg_parser,
+)
 
 
 @dataclass
 class Ant:
 	path: List[int]
-	cost: float = float('inf')
+	cost: float = float("inf")
 	assignments: List[int] = field(default_factory=list)
 
 
 class HybridACS:
-	def __init__(self, rsp_instance: RSP, num_ants: int = 50, Q: int = 100, alpha: float = 1, beta: float = 3,
-	             rho: float = 0.9, theta: float = 0.1, xi: float = 0.5, sigma: float = 0.1, q0: float = 1,
-	             max_iterations: int = 200, no_improve_iterations: int = 2):
+	def __init__(
+		self,
+		rsp_instance: RSP,
+		num_ants: int = 50,
+		Q: int = 100,
+		alpha: float = 1,
+		beta: float = 3,
+		rho: float = 0.9,
+		theta: float = 0.1,
+		xi: float = 0.5,
+		sigma: float = 0.1,
+		q0: float = 1,
+		max_iterations: int = 200,
+		no_improve_iterations: int = 2,
+	):
 		self.rsp = rsp_instance
 		self.num_ants = num_ants
 		self.max_iterations = max_iterations
@@ -57,7 +75,7 @@ class HybridACS:
 				ants.append(Sm)
 
 			for Sm in ants:
-				self.vnd(Sm)
+				self.local_search(Sm)
 
 			Slocal = min(ants, key=lambda x: x.cost)
 			print(f"Local best cost: {Slocal.cost}")
@@ -104,7 +122,9 @@ class HybridACS:
 
 		while len(ant.path) < self.rsp.p:
 			last_node = ant.path[-1]
-			candidate_nodes = [node for node in range(len(self.rsp.points)) if node not in tabu_list]
+			candidate_nodes = [
+				node for node in range(len(self.rsp.points)) if node not in tabu_list
+			]
 
 			if not candidate_nodes:
 				break  # No more nodes to visit, cycle construction is complete
@@ -123,7 +143,7 @@ class HybridACS:
 			tau_prime_j = self.assignment_pheromone[j]
 			tau_ij = self.pheromone[last_node, j]
 			eta_ij = 1 / self.rsp.distance_matrix[last_node, j]  # Heuristic information
-			a_j = (tau_prime_j * tau_ij) ** self.alpha * eta_ij ** self.beta
+			a_j = (tau_prime_j * tau_ij) ** self.alpha * eta_ij**self.beta
 			attractiveness.append(a_j)
 		return attractiveness
 
@@ -139,7 +159,9 @@ class HybridACS:
 
 	def assign_non_visited_nodes(self, ant: Ant):
 		centers = self.rsp.points[ant.path]
-		assignments_indices = np.argmin(distance_matrix(self.rsp.points, centers), axis=1)
+		assignments_indices = np.argmin(
+			distance_matrix(self.rsp.points, centers), axis=1
+		)
 		assignments = [ant.path[i] for i in assignments_indices]
 		ant.assignments = assignments
 
@@ -149,12 +171,16 @@ class HybridACS:
 			k = ant.path[i + 1]
 
 			# Update routing pheromone
-			self.pheromone[j][k] = (1 - self.xi) * self.pheromone[j][k] + self.xi * self.tau_0
+			self.pheromone[j][k] = (1 - self.xi) * self.pheromone[j][
+				k
+			] + self.xi * self.tau_0
 			self.pheromone[k][j] = self.pheromone[j][k]  # assuming symmetry
 
 			# Update assignment pheromone
 			for l in ant.assignments:
-				self.assignment_pheromone[l] = (1 - self.sigma) * self.assignment_pheromone[l] + self.sigma * self.tau_0
+				self.assignment_pheromone[l] = (
+					1 - self.sigma
+				) * self.assignment_pheromone[l] + self.sigma * self.tau_0
 
 	def global_pheromone_update(self):
 		best_path = self.best_solution.path
@@ -166,12 +192,16 @@ class HybridACS:
 			k = best_path[i + 1]
 
 			# Update routing pheromone
-			self.pheromone[j][k] = (1 - self.rho) * self.pheromone[j][k] + self.rho * Q / best_cost
+			self.pheromone[j][k] = (1 - self.rho) * self.pheromone[j][
+				k
+			] + self.rho * Q / best_cost
 			self.pheromone[k][j] = self.pheromone[j][k]  # assuming symmetry
 
 		# Update assignment pheromone
 		for l in range(len(self.assignment_pheromone)):
-			self.assignment_pheromone[l] = (1 - self.theta) * self.assignment_pheromone[l] + self.theta * Q / best_cost
+			self.assignment_pheromone[l] = (1 - self.theta) * self.assignment_pheromone[
+				l
+			] + self.theta * Q / best_cost
 
 	def _lin_kernighan(self, ant: Ant):
 		original_path = ant.path
@@ -181,7 +211,9 @@ class HybridACS:
 		path = path[:-1]
 		path_in_original = [original_path[i] for i in path]
 		ant.path = path_in_original
-		ant.cost = calculate_cost(self.rsp.distance_matrix, path_in_original, ant.assignments, self.rsp.alpha)
+		ant.cost = calculate_cost(
+			self.rsp.distance_matrix, path_in_original, ant.assignments, self.rsp.alpha
+		)
 
 	def _3_opt(self, ant):
 		orginal_path = ant.path
@@ -190,7 +222,7 @@ class HybridACS:
 		path_in_original = [orginal_path[i] for i in path]
 		ant.path = path_in_original
 
-	def vnd(self, Si: Ant):
+	def local_search(self, Si: Ant):
 		k = 1
 		k_max = 2
 		while k <= k_max:
@@ -211,21 +243,27 @@ class HybridACS:
 
 	def exchange(self, ant: Ant):
 		improved = False
-		current_cost = calculate_cost(self.rsp.distance_matrix, ant.path, ant.assignments, self.rsp.alpha)
+		current_cost = calculate_cost(
+			self.rsp.distance_matrix, ant.path, ant.assignments, self.rsp.alpha
+		)
 		ant.cost = current_cost
 
 		# i in a random order
-		for i in random.sample(range(1, len(ant.path)), len(ant.path) - 1):  # Exclude depot from swapping
-			# for i in range(1, len(ant.path)):  # Exclude depot from swapping
+		# for i in random.sample(range(1, len(ant.path)), len(ant.path) - 1):  # Exclude depot from swapping
+		for i in range(1, len(ant.path)):  # Exclude depot from swapping
 			for j in range(len(self.rsp.points)):
 				if j not in ant.path:
 					new_path = ant.path[:]
 					new_path[i] = j  # Swap node
 
 					centers = self.rsp.points[new_path]
-					assignments_indices = np.argmin(distance_matrix(self.rsp.points, centers), axis=1)
+					assignments_indices = np.argmin(
+						distance_matrix(self.rsp.points, centers), axis=1
+					)
 					assignments = [new_path[i] for i in assignments_indices]
-					new_total_cost = calculate_cost(self.rsp.distance_matrix, new_path, assignments, self.rsp.alpha)
+					new_total_cost = calculate_cost(
+						self.rsp.distance_matrix, new_path, assignments, self.rsp.alpha
+					)
 
 					if new_total_cost < current_cost:
 						ant.path = new_path
@@ -233,17 +271,17 @@ class HybridACS:
 						ant.cost = new_total_cost
 						ant.assignments = assignments
 						improved = True
-						return improved
+						# return improved
 
 		return improved
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 	args = arg_parser()
 	alpha = args.alpha
 	points = read_points(args.filename)
 	p = int(len(points) * args.prop)
-	instance_name = args.filename.split('/')[-1].split('.')[0]
+	instance_name = args.filename.split("/")[-1].split(".")[0]
 	rsp = RSP(points=points, alpha=alpha, p=p)
 	solver = HybridACS(rsp, num_ants=4)
 	start_time = time.time()
@@ -258,10 +296,12 @@ if __name__ == '__main__':
 	print(solution.assignments)
 	rsp.evaluate()
 	results = {
-		"Objective Value": solution.cost,
+		"Objective Value": rsp.cost,
 		"Cost": rsp.tsp_cost,
 		"MeanTime": rsp.time,
 		"Ratio": rsp.ratio,
 		"Runtime": end_time - start_time,
+		"path": rsp.tsp_path,
+		"assignments": rsp.assignments,
 	}
 	dump_result(results, rsp, f"hacs_{instance_name}_p{p}_alpha{alpha}")

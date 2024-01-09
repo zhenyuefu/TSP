@@ -114,7 +114,9 @@ def pl_non_compact_entier(args):
 			"Cost": rsp.tsp_cost,
 			"MeanTime": rsp.time,
 			"Ratio": rsp.ratio,
-			"Runtime": runtime
+			"Runtime": runtime,
+			"path": rsp.tsp_path,
+			"assignments": rsp.assignments,
 		}
 
 		# Dump the result

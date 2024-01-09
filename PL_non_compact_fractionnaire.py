@@ -36,48 +36,48 @@ class RingStarCallback:
 							             >= 2 * self.y[i, i])
 
 		# heuristic separation
+		# elif where == GRB.Callback.MIPNODE:
+		# 	if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL:
+		# 		xrel = model.cbGetNodeRel(self.x)
+		# 		yrel = model.cbGetNodeRel(self.y)
+
+		# 		for i in range(1, self.n):
+		# 			if yrel[i, i] > 0:
+		# 				S = [i]
+		# 				nS = [j for j in self.V if j != i]
+		# 				for j in range(1, self.n):
+		# 					if j != i:
+		# 						S.append(j)
+		# 						nS.remove(j)
+		# 					if np.sum([xrel[x, y] for x in S for y in nS]) < 2 * yrel[i, i]:
+		# 						for k in S:
+		# 							model.cbCut(gp.quicksum(self.x[x, y] for x in S for y in nS)
+		# 							            >= 2 * self.y[k, k])
+		# 						break
+
+		# exact separation
 		elif where == GRB.Callback.MIPNODE:
 			if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL:
 				xrel = model.cbGetNodeRel(self.x)
 				yrel = model.cbGetNodeRel(self.y)
+				edges = [(i, j) for (i, j), v in xrel.items() if v > 0]
+
+				# 使用 igraph 构建一个无向图
+				G = Graph()
+				G.add_vertices(self.V)  # 添加顶点
+				G.add_edges(edges)  # 添加边
+				G.es['capacity'] = [xrel[edge] for edge in edges]  # 添加边的权重
 
 				for i in range(1, self.n):
-					if yrel[i, i] > 0:
-						S = [i]
-						nS = [j for j in self.V if j != i]
-						for j in range(1, self.n):
-							if j != i:
-								S.append(j)
-								nS.remove(j)
-							if np.sum([xrel[x, y] for x in S for y in nS]) < 2 * yrel[i, i]:
-								for k in S:
-									model.cbCut(gp.quicksum(self.x[x, y] for x in S for y in nS)
-									            >= 2 * self.y[k, k])
-								break
+					# 使用 igraph 计算最小割
+					mc = G.mincut(0, i, capacity='capacity')
+					min_cut = mc.value
+					S, nS = mc.partition
 
-	# exact separation
-	# elif where == GRB.Callback.MIPNODE:
-	# 	if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL:
-	# 		xrel = model.cbGetNodeRel(self.x)
-	# 		yrel = model.cbGetNodeRel(self.y)
-	# 		edges = [(i, j) for (i, j), v in xrel.items() if v > 0]
-
-	# 		# 使用 igraph 构建一个无向图
-	# 		G = Graph()
-	# 		G.add_vertices(self.V)  # 添加顶点
-	# 		G.add_edges(edges)  # 添加边
-	# 		G.es['capacity'] = [xrel[edge] for edge in edges]  # 添加边的权重
-
-	# 		for i in range(1, self.n):
-	# 			# 使用 igraph 计算最小割
-	# 			mc = G.mincut(0, i, capacity='capacity')
-	# 			min_cut = mc.value
-	# 			S, nS = mc.partition
-
-	# 			if min_cut < 2 * yrel[i, i] - self.epsilon:
-	# 				for k in S:
-	# 					model.cbCut(gp.quicksum(self.x[x, y] for x in S for y in nS if (x, y) in self.x)
-	# 								>= 2 * self.y[k, k])
+					if min_cut < 2 * yrel[i, i] - self.epsilon:
+						for k in S:
+							model.cbCut(gp.quicksum(self.x[x, y] for x in S for y in nS if (x, y) in self.x)
+										>= 2 * self.y[k, k])
 
 
 def pl_non_compact_fractionnaire(args):
@@ -163,7 +163,9 @@ def pl_non_compact_fractionnaire(args):
 			"Cost": rsp.tsp_cost,
 			"MeanTime": rsp.time,
 			"Ration": rsp.ratio,
-			"Runtime": runtime
+			"Runtime": runtime,
+			"path": rsp.tsp_path,
+			"assignments": rsp.assignments,
 		}
 
 		# Dump the result

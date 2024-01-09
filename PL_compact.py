@@ -101,8 +101,10 @@ def pl_compact(args):
 			"Objective Value": rsp.cost,
 			"Cost": rsp.tsp_cost,
 			"MeanTime": rsp.time,
-			"Ration": rsp.ratio,
-			"Runtime": runtime
+			"Ratio": rsp.ratio,
+			"Runtime": runtime,
+			"path": rsp.tsp_path,
+			"assignments": rsp.assignments,
 		}
 
 		# Dump the result

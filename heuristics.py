@@ -89,6 +89,8 @@ if __name__ == '__main__':
 		"Cost": rsp.tsp_cost,
 		"MeanTime": rsp.time,
 		"Ratio": rsp.ratio,
-		"Runtime": t
+		"Runtime": t,
+		"path": rsp.tsp_path,
+		"assignments": rsp.assignments,
 	}
 	dump_result(results, rsp, f"heuristics_{instance_name}_p{p}_alpha{alpha}")
