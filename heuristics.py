@@ -1,4 +1,5 @@
 from math import ceil, sqrt
+import time
 
 import elkai
 from matplotlib import pyplot as plt
@@ -6,6 +7,7 @@ import numpy as np
 from scipy.spatial import distance_matrix
 
 from RSP import RSP
+from utils import dump_result
 
 
 class RSPHeuristics:
@@ -13,13 +15,16 @@ class RSPHeuristics:
 		self.rsp = rsp_instance
 
 	def solve(self):
+		start = time.time()
 		centers_indices, assignments = self._solve_p_center_problem()
 		tsp_path = self._solve_tsp(centers_indices)
+		end = time.time()
 		rsp.assignments = assignments
 		rsp.tsp_path = tsp_path
 		print(f"assignments: {assignments}")
 		print(f"tsp_path: {tsp_path}")
 		rsp.evaluate()
+		return end - start
 
 	def _solve_tsp(self, centers_indices):
 		# Create a distance matrix for the centers
@@ -70,14 +75,21 @@ class RSPHeuristics:
 
 
 if __name__ == '__main__':
-	from utils import read_points
+	from utils import read_points, arg_parser
+	args = arg_parser()
+	alpha = args.alpha
+	data = read_points(args.filename)
+	p = int(len(data) * args.prop)
+	instance_name = args.filename.split('/')[-1].split('.')[0]
 
-	filename = 'att48.tsp'
-	ALPHA = 10
-	P = 10
-	data = read_points(f'./Instances_TSP/{filename}')
-
-	rsp = RSP(points=data, alpha=ALPHA, p=P)
+	rsp = RSP(points=data, alpha=alpha, p=p)
 	solver = RSPHeuristics(rsp)
-	solver.solve()
-	rsp.savefig('heuristics.png')
+	t = solver.solve()
+	results = {
+		"Objective Value": rsp.cost,
+		"Cost": rsp.tsp_cost,
+		"MeanTime": rsp.time,
+		"Ratio": rsp.ratio,
+		"Runtime": t
+	}
+	dump_result(results, rsp, f"heuristics_{instance_name}_p{p}_alpha{alpha}")
