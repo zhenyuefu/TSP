@@ -14,8 +14,8 @@ from utils import calculate_assignment_cost, calculate_tsp_cost, compute_time_an
 @dataclass
 class RSP:
 	points: np.ndarray  # 点集，每个点由纬度和经度组成，存储在 NumPy 数组中
-	alpha: float        # assignment cost 的权重
-	p: int              # 选择作为车站的点的数量
+	alpha: float  # assignment cost 的权重
+	p: int  # 选择作为车站的点的数量
 	distance_matrix: np.ndarray = field(init=False)  # 距离矩阵，初始时不在构造函数中设置
 	assignments: List[int] = field(default_factory=list)  # 非车站点到车站点的分配
 	tsp_path: List[int] = field(default_factory=list)  # 旅行商问题路径
@@ -49,13 +49,13 @@ class RSP:
 
 	# 	return G
 	def create_graph(self):
-	
+
 		G = Graph(directed=False)
 		pos = G.new_vertex_property('vector<double>')
-		edge_type = G.new_edge_property('string')  
-		edge_color = G.new_edge_property('vector<double>')  
-		edge_weight = G.new_edge_property('double')  
-		v_color = G.new_vertex_property('vector<double>')  
+		edge_type = G.new_edge_property('string')
+		edge_color = G.new_edge_property('vector<double>')
+		edge_weight = G.new_edge_property('double')
+		v_color = G.new_vertex_property('vector<double>')
 		G.vp["pos"] = pos
 		G.vp["color"] = v_color
 		G.ep["type"] = edge_type
@@ -70,10 +70,10 @@ class RSP:
 		# 添加边
 		for i in range(len(self.tsp_path)):
 			v_color[G.vertex(self.tsp_path[i])] = [1, 0, 0, 1]
-			e = G.add_edge(G.vertex(self.tsp_path[i]), G.vertex(self.tsp_path[(i+1) % len(self.tsp_path)]))
+			e = G.add_edge(G.vertex(self.tsp_path[i]), G.vertex(self.tsp_path[(i + 1) % len(self.tsp_path)]))
 			edge_type[e] = 'tsp'
 			edge_color[e] = [1, 0, 0, 1]
-			edge_weight[e] = self.distance_matrix[self.tsp_path[i], self.tsp_path[(i+1) % len(self.tsp_path)]]
+			edge_weight[e] = self.distance_matrix[self.tsp_path[i], self.tsp_path[(i + 1) % len(self.tsp_path)]]
 
 		for i, center in enumerate(self.assignments):
 			if i not in self.tsp_path:
@@ -90,9 +90,9 @@ class RSP:
 		if self.G is None:
 			self.create_graph()
 		# 设置绘图选项
-		graph_draw(self.G, pos=self.G.vp["pos"], vertex_size = 4 , vertex_color = self.G.vp['color'] ,vertex_fill_color = self.G.vp['color'],edge_color=self.G.ep["color"], bg_color='white',output=filename)
-		
-
+		graph_draw(self.G, pos=self.G.vp["pos"], vertex_size=4, vertex_color=self.G.vp['color'],
+		           vertex_fill_color=self.G.vp['color'], edge_color=self.G.ep["color"], bg_color='white',
+		           output=filename)
 
 	# def savefig(self, filename, runtime = None):
 	# 	G = self.create_graph()
@@ -113,7 +113,7 @@ class RSP:
 	def evaluate(self):
 		if self.G is None:
 			self.G = self.create_graph()
-		
+
 		self.tsp_cost = calculate_tsp_cost(self.distance_matrix, self.tsp_path)
 		assignment_cost = calculate_assignment_cost(self.distance_matrix, self.assignments)
 		self.cost = self.tsp_cost + self.alpha * assignment_cost

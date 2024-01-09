@@ -2,7 +2,6 @@ from math import ceil, sqrt
 import time
 
 import elkai
-from matplotlib import pyplot as plt
 import numpy as np
 from scipy.spatial import distance_matrix
 

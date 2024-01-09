@@ -2,9 +2,7 @@ from enum import Enum
 from itertools import cycle, islice, dropwhile
 import time
 
-from NuagePoints import NuagePoints
 from python_tsp.distances import euclidean_distance_matrix
-
 from christofides_tsp import christofides_tsp
 
 class OptCase(Enum):
@@ -142,14 +140,3 @@ def reverse_segments(route, case, i, j, k):
 		# A'B'C
 		solution = list(reversed(first_segment)) + list(reversed(second_segment)) + list(reversed(third_segment))
 	return solution
-
-
-
-if __name__ == '__main__':
-	nuage_points = NuagePoints('./Instances_TSP/att48.tsp')
-	distance_matrix = euclidean_distance_matrix(nuage_points.points)
-	start = time.time()
-	route = tsp_3_opt(distance_matrix)
-	end = time.time()
-	print(end - start)
-	print(route)
